@@ -10,42 +10,40 @@ A containerized Extract-Load-Transform (ELT) data pipeline using Apache Airflow 
 
 ## Quick Start
 
-### 1. Create Project Structure
+### 1. Verify Prerequisites
+
+Ensure you have:
+- Docker & Docker Compose installed
+- Ports 5433 (PostgreSQL) and 8080 (Airflow UI) available
+- 4GB+ RAM
+
+### 2. Start Services
+
+Run all three services (PostgreSQL, Airflow Webserver, Scheduler):
 
 ```bash
-mkdir -p dags logs plugins output
-```
-
-### 2. Verify File Placement
-
-Ensure the following files are in the project root:
-- `docker-compose.yml`
-- `init-db.sql`
-- `.env`
-- `README.md` (this file)
-- `Makefile`
-- `.gitignore`
-- `dags/elt_pipeline_dag.py`
-
-### 3. Start Services
-
-```bash
+# Start in detached mode (background)
 docker-compose up -d
+
+# Or start in foreground to see logs (useful for debugging)
+docker-compose up
 ```
 
-### 4. Wait for Startup
-
-Services take 30-60 seconds to start. Check status:
+### 3. Check Service Status
 
 ```bash
+# View all containers
 docker-compose ps
+
+# View logs
+docker-compose logs -f
 ```
 
-Wait until all containers show `healthy` or `running` status.
+All services should show as `healthy` or `running`.
 
-### 5. Access Airflow UI
+### 4. Access Airflow UI
 
-Open your browser and navigate to:
+Once services are healthy (30-60 seconds), open:
 
 ```
 http://localhost:8080
@@ -54,6 +52,36 @@ http://localhost:8080
 **Login Credentials:**
 - Username: `admin`
 - Password: `admin`
+
+### 5. Verify DAG is Loaded
+
+In the Airflow UI, navigate to the DAGs list. You should see `elt_pipeline_dag` without any import errors.
+
+### Quick Commands
+
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# View logs (all services)
+docker-compose logs -f
+
+# View specific service logs
+docker-compose logs -f webserver    # Airflow UI logs
+docker-compose logs -f scheduler    # Scheduler logs
+docker-compose logs -f postgres     # Database logs
+
+# Rebuild services (fresh start)
+docker-compose down -v
+docker-compose up -d
+
+# Clean up everything
+docker-compose down -v
+rm -rf logs/ output/
+```
 
 ## Running the DAG
 

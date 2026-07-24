@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow_pass_2024}
       POSTGRES_DB: ${POSTGRES_DB:-airflow_db}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -22,13 +22,14 @@ services:
       - airflow-network
 
   webserver:
-    image: apache/airflow:2.9.1-python3.11
+    image: apache/airflow:3.3.0-python3.11
     container_name: airflow-webserver
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       AIRFLOW_HOME: /opt/airflow
+      PYTHONPATH: /opt/airflow
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
@@ -37,9 +38,8 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
       _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
     volumes:
-      - ./dags:/opt/airflow/dags
+      - .:/opt/airflow
       - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
       - ./output:/opt/airflow/output
     ports:
       - "8080:8080"
@@ -56,13 +56,14 @@ services:
       - airflow-network
 
   scheduler:
-    image: apache/airflow:2.9.1-python3.11
+    image: apache/airflow:3.3.0-python3.11
     container_name: airflow-scheduler
     depends_on:
       webserver:
         condition: service_healthy
     environment:
       AIRFLOW_HOME: /opt/airflow
+      PYTHONPATH: /opt/airflow
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
@@ -71,9 +72,8 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
       _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
     volumes:
-      - ./dags:/opt/airflow/dags
+      - .:/opt/airflow
       - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
       - ./output:/opt/airflow/output
     command: airflow scheduler
     networks:
