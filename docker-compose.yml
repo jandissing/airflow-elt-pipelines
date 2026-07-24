@@ -36,6 +36,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+      AIRFLOW__API_AUTH__JWT_SECRET: "super_secret_jwt_key_for_airflow_3"
       _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
     volumes:
       - .:/opt/airflow
@@ -44,11 +45,11 @@ services:
     ports:
       - "8080:8080"
     command: >
-      bash -c "airflow db upgrade &&
+      bash -c "airflow db migrate &&
                airflow users create -r Admin -u admin -e admin@example.com -f Admin -l User -p admin 2>/dev/null || true &&
-               airflow webserver"
+               airflow api-server"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v2/monitor/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,6 +71,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+      AIRFLOW__API_AUTH__JWT_SECRET: "super_secret_jwt_key_for_airflow_3"
       _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
     volumes:
       - .:/opt/airflow
