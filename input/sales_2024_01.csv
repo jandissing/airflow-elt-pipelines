@@ -1,0 +1,9 @@
+customer_name,product_name,quantity,unit_price,sale_date,region
+João Silva,Laptop,1,3500.00,2024-01-15,Southeast
+Maria Santos,Mouse,5,150.00,2024-01-16,South
+Carlos Oliveira,Keyboard,2,450.00,2024-01-17,Northeast
+Ana Souza,Monitor,1,1200.00,2024-01-18,North
+Pedro Costa,Headphones,3,350.00,2024-01-19,Southeast
+Lucia Ferreira,Webcam,4,280.00,2024-01-20,South
+Roberto Gomes,Laptop,1,3500.00,2024-01-21,Northeast
+Fernanda Dias,Monitor,2,1200.00,2024-01-22,North

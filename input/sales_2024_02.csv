@@ -1,0 +1,10 @@
+customer_name,product_name,quantity,unit_price,sale_date,region
+Bruno Almeida,Laptop,2,3200.00,2024-02-03,Southeast
+Camila Rocha,Mouse,3,160.00,2024-02-05,North
+Diego Martins,Keyboard,4,420.00,2024-02-07,South
+Elaine Barbosa,Monitor,1,1350.00,2024-02-09,Northeast
+Felipe Nunes,Headphones,2,380.00,2024-02-11,Southeast
+Gabriela Pinto,Webcam,5,260.00,2024-02-13,North
+Henrique Lima,Laptop,1,3600.00,2024-02-15,South
+Isabela Freitas,Monitor,3,1150.00,2024-02-17,Northeast
+Juliana Castro,Mouse,6,145.00,2024-02-19,Southeast

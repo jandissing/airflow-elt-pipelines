@@ -34,6 +34,16 @@ VALUES
     ('Roberto Gomes', 'Laptop', 1, 3500.00, '2024-01-21', 'Northeast'),
     ('Fernanda Dias', 'Monitor', 2, 1200.00, '2024-01-22', 'North');
 
+-- Create region_sales_summary table (populated by csv_to_db_dag: CSV -> aggregate by region -> DB)
+CREATE TABLE IF NOT EXISTS region_sales_summary (
+    region VARCHAR(50) PRIMARY KEY,
+    total_quantity INTEGER,
+    total_revenue DECIMAL(12, 2),
+    avg_unit_price DECIMAL(10, 2),
+    num_orders INTEGER,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Grant permissions to airflow user
 GRANT USAGE ON SCHEMA public TO airflow_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO airflow_user;

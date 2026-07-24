@@ -1,6 +1,8 @@
 # Airflow
 airflow.db
 airflow-webserver.pid
+airflow.cfg
+webserver_config.py
 logs/
 dags/__pycache__/
 *.pyc
