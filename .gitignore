@@ -1,0 +1,44 @@
+# Airflow
+airflow.db
+airflow-webserver.pid
+logs/
+dags/__pycache__/
+*.pyc
+
+# Generated files
+output/*.xlsx
+output/*.csv
+
+# Database
+postgres_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Environment
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.temp
+*~
