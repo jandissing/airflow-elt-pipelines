@@ -18,33 +18,48 @@ def load_to_database(**context):
         int: Number of rows loaded
     """
     try:
-        logger.info("Starting data load to database")
+        logger.info("=" * 60)
+        logger.info("📤 LOAD TASK STARTED")
+        logger.info(f"📍 Target table: {TRANSFORMED_TABLE}")
 
         task_instance = context["task_instance"]
+        logger.info("📥 Pulling transformed_data from XCom (transform task)")
         transformed_data_json = task_instance.xcom_pull(
             task_ids="transform", key="transformed_data"
         )
 
         if not transformed_data_json:
-            raise ValueError("No transformed data found in XCom")
+            raise ValueError("No transformed data found in XCom from transform task")
+        logger.info("✓ Transformed data retrieved")
 
         df = pd.read_json(transformed_data_json)
+        logger.info(f"📊 Loaded {len(df)} rows")
 
+        logger.info(f"🔗 Connecting to database...")
         engine = create_engine(DB_CONNECTION)
+        logger.info("✓ Database connection established")
 
+        logger.info(f"🗑️ Clearing existing data from {TRANSFORMED_TABLE}...")
         with engine.begin() as connection:
             connection.execute(text(f"DELETE FROM {TRANSFORMED_TABLE}"))
-            logger.info(f"Cleared existing data from {TRANSFORMED_TABLE} table")
+        logger.info(f"✓ Old data cleared")
 
+        logger.info(f"💾 Inserting {len(df)} new rows...")
         df.to_sql(TRANSFORMED_TABLE, engine, if_exists="append", index=False)
 
         row_count = len(df)
-        logger.info(f"Successfully loaded {row_count} rows into {TRANSFORMED_TABLE} table")
+        logger.info(f"✓ Inserted {row_count} rows")
 
         engine.dispose()
+        logger.info("✓ Database connection closed")
 
+        logger.info(f"✅ LOAD TASK COMPLETED - {row_count} rows loaded")
+        logger.info("=" * 60)
         return row_count
 
     except Exception as e:
-        logger.error(f"Error during data load: {str(e)}", exc_info=True)
+        logger.error("=" * 60)
+        logger.error("❌ LOAD TASK FAILED")
+        logger.error(f"Error: {str(e)}", exc_info=True)
+        logger.error("=" * 60)
         raise
