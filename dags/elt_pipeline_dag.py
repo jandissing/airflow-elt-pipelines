@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 
 from elt.extract import extract_raw_data
 from elt.transform import transform_data
@@ -18,7 +18,7 @@ default_args = {
 dag = DAG(
     "elt_pipeline_dag",
     default_args=default_args,
-    schedule_interval="0 9 * * *",
+    schedule="0 9 * * *",
     catchup=False,
     tags=["elt", "data-engineering"],
 )
