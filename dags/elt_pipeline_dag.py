@@ -12,10 +12,10 @@ if PROJECT_ROOT not in sys.path:
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 
-from elt.extract import extract_raw_data
-from elt.transform import transform_data
-from elt.load import load_to_database
-from elt.export import export_to_excel
+from elt.extract_sales import extract_raw_data
+from elt.transform_sales import transform_data
+from elt.load_sales import load_to_database
+from elt.export_sales import export_to_excel
 
 default_args = {
     "owner": "airflow",

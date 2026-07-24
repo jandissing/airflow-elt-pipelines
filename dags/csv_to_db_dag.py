@@ -1,10 +1,10 @@
 import sys
 from datetime import datetime, timedelta
 
-# Ensure the project root is importable so local packages (csv_elt) resolve in
+# Ensure the project root is importable so the local elt package resolves in
 # task-worker subprocesses. Airflow 3.x runs DAGs from a versioned bundle copy,
 # so a __file__-relative path points at the bundle temp dir, not the project
-# root — hardcode the absolute mount path where the packages actually live.
+# root — hardcode the absolute mount path where the package actually lives.
 PROJECT_ROOT = "/opt/airflow"
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -12,9 +12,9 @@ if PROJECT_ROOT not in sys.path:
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 
-from csv_elt.extract import extract_csv_files
-from csv_elt.transform import aggregate_by_region
-from csv_elt.load import load_region_summary
+from elt.extract_csv import extract_csv_files
+from elt.transform_csv import aggregate_by_region
+from elt.load_csv import load_region_summary
 
 default_args = {
     "owner": "airflow",

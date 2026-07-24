@@ -11,6 +11,11 @@ DB_NAME = os.getenv("POSTGRES_DB", "airflow_db")
 DB_CONNECTION = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 OUTPUT_DIR = "/opt/airflow/output"
+INPUT_DIR = "/opt/airflow/input"
 
+# Sales pipeline (DB -> transform -> DB/Excel)
 RAW_TABLE = "raw_sales_data"
 TRANSFORMED_TABLE = "transformed_sales"
+
+# CSV ingest pipeline (CSV files -> aggregate by region -> DB)
+REGION_SUMMARY_TABLE = "region_sales_summary"

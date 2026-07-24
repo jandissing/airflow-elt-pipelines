@@ -6,7 +6,7 @@ import os
 
 import pandas as pd
 
-from csv_elt.config import INPUT_DIR
+from elt.config import INPUT_DIR
 
 logger = logging.getLogger(__name__)
 

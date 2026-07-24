@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from csv_elt.config import DB_CONNECTION, REGION_SUMMARY_TABLE
+from elt.config import DB_CONNECTION, REGION_SUMMARY_TABLE
 
 logger = logging.getLogger(__name__)
 
