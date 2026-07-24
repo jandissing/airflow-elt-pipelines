@@ -1,6 +1,7 @@
 """Data transformation operations"""
 
 import logging
+from io import StringIO
 
 import pandas as pd
 
@@ -26,7 +27,7 @@ def transform_data(**context):
             raise ValueError("No raw data found in XCom from extract task")
         logger.info("✓ Raw data retrieved")
 
-        df = pd.read_json(raw_data_json)
+        df = pd.read_json(StringIO(raw_data_json))
         logger.info(f"📊 Loaded {len(df)} rows from XCom")
         logger.info(f"📋 Input columns: {list(df.columns)}")
 
@@ -43,7 +44,9 @@ def transform_data(**context):
         logger.info(f"✓ Selected {row_count} rows")
         logger.info(f"📋 Output columns: {list(transformed_df.columns)}")
 
-        transformed_data_json = transformed_df.to_json(orient="records")
+        transformed_data_json = transformed_df.to_json(
+            orient="records", date_format="iso"
+        )
         task_instance.xcom_push(key="transformed_data", value=transformed_data_json)
         logger.info("✓ Transformed data pushed to XCom")
 

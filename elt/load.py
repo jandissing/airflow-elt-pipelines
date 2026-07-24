@@ -1,6 +1,7 @@
 """Data loading to PostgreSQL"""
 
 import logging
+from io import StringIO
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -32,8 +33,14 @@ def load_to_database(**context):
             raise ValueError("No transformed data found in XCom from transform task")
         logger.info("✓ Transformed data retrieved")
 
-        df = pd.read_json(transformed_data_json)
+        df = pd.read_json(StringIO(transformed_data_json))
         logger.info(f"📊 Loaded {len(df)} rows")
+
+        # sale_date survives the JSON round-trip as an ISO string; coerce it back
+        # to a real date so it matches the DATE column (avoids bigint/date mismatch).
+        if "sale_date" in df.columns:
+            df["sale_date"] = pd.to_datetime(df["sale_date"]).dt.date
+            logger.info("✓ Normalized sale_date to date type")
 
         logger.info(f"🔗 Connecting to database...")
         engine = create_engine(DB_CONNECTION)

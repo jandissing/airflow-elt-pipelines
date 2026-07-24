@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime
+from io import StringIO
 
 import pandas as pd
 
@@ -32,7 +33,7 @@ def export_to_excel(**context):
             raise ValueError("No transformed data found in XCom from transform task")
         logger.info("✓ Transformed data retrieved")
 
-        df = pd.read_json(transformed_data_json)
+        df = pd.read_json(StringIO(transformed_data_json))
         logger.info(f"📊 Loaded {len(df)} rows for export")
 
         logger.info(f"📂 Ensuring output directory exists: {OUTPUT_DIR}")

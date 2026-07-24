@@ -38,7 +38,7 @@ def extract_raw_data(**context):
         logger.info(f"📋 Columns: {list(df.columns)}")
         logger.info(f"💾 DataFrame shape: {df.shape}")
 
-        raw_data_json = df.to_json(orient="records")
+        raw_data_json = df.to_json(orient="records", date_format="iso")
         context["task_instance"].xcom_push(key="raw_data", value=raw_data_json)
         logger.info("✓ Data pushed to XCom")
 
