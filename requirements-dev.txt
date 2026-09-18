@@ -1,0 +1,8 @@
+# Local + CI test dependencies.
+# Install against the Airflow constraints file for your Python version, e.g.:
+#   pip install -r requirements-dev.txt \
+#     --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.0/constraints-3.11.txt
+-r requirements.txt
+apache-airflow==3.3.0
+pytest==8.4.2
+ruff==0.14.0

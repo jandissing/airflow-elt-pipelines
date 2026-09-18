@@ -20,9 +20,39 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def extract_csv_files(**context):
+def read_csv_directory(input_dir: str) -> pd.DataFrame:
+    """Read and concatenate every ``*.csv`` in ``input_dir``, validating the schema.
+
+    Raises:
+        FileNotFoundError: if the directory contains no CSV files.
+        ValueError: if the combined frame is missing an expected column.
     """
-    Read every CSV file in INPUT_DIR and concatenate into one DataFrame.
+    csv_files = sorted(glob.glob(os.path.join(input_dir, "*.csv")))
+    if not csv_files:
+        raise FileNotFoundError(
+            f"No CSV files found in {input_dir}. Add *.csv files and re-run."
+        )
+
+    logger.info(f"📄 Found {len(csv_files)} CSV file(s)")
+    frames = []
+    for path in csv_files:
+        df_part = pd.read_csv(path)
+        logger.info(f"   • {os.path.basename(path)}: {len(df_part)} rows")
+        frames.append(df_part)
+
+    df = pd.concat(frames, ignore_index=True)
+
+    missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"CSV files are missing expected columns: {missing}. "
+            f"Expected: {EXPECTED_COLUMNS}"
+        )
+    return df
+
+
+def extract_csv_files(**context):
+    """Airflow task: read the input CSVs and publish the rows to XCom.
 
     Returns:
         int: Total number of rows read across all files
@@ -32,32 +62,9 @@ def extract_csv_files(**context):
         logger.info("🔍 EXTRACT (CSV) TASK STARTED")
         logger.info(f"📂 Input directory: {INPUT_DIR}")
 
-        pattern = os.path.join(INPUT_DIR, "*.csv")
-        csv_files = sorted(glob.glob(pattern))
-
-        if not csv_files:
-            raise FileNotFoundError(
-                f"No CSV files found in {INPUT_DIR}. Add *.csv files and re-run."
-            )
-
-        logger.info(f"📄 Found {len(csv_files)} CSV file(s)")
-
-        frames = []
-        for path in csv_files:
-            df_part = pd.read_csv(path)
-            logger.info(f"   • {os.path.basename(path)}: {len(df_part)} rows")
-            frames.append(df_part)
-
-        df = pd.concat(frames, ignore_index=True)
+        df = read_csv_directory(INPUT_DIR)
         logger.info(f"✓ Combined into {len(df)} total rows")
         logger.info(f"📋 Columns: {list(df.columns)}")
-
-        missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
-        if missing:
-            raise ValueError(
-                f"CSV files are missing expected columns: {missing}. "
-                f"Expected: {EXPECTED_COLUMNS}"
-            )
         logger.info("✓ Schema validation passed")
 
         raw_data_json = df.to_json(orient="records")

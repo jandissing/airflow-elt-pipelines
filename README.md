@@ -2,7 +2,7 @@
 
 A containerized data-engineering sandbox running **Apache Airflow 3.3.0** on
 **PostgreSQL 15**, orchestrating two ELT pipelines with **pandas**. Everything
-runs locally via Docker Compose.
+runs locally via Docker Compose, with unit tests and CI.
 
 - **`elt_pipeline_dag`** — forward ELT: reads a Postgres table, transforms it,
   loads the result back into another table, and exports a timestamped Excel file.
@@ -13,11 +13,11 @@ runs locally via Docker Compose.
 
 ## Stack
 
-| Service     | Image                             | Host port | Purpose                                   |
-|-------------|-----------------------------------|-----------|-------------------------------------------|
-| `postgres`  | `postgres:15-alpine`              | **5433**  | Source data **and** Airflow metadata DB   |
-| `webserver` | `apache/airflow:3.3.0-python3.11` | **8080**  | Airflow UI + REST/execution API server    |
-| `scheduler` | `apache/airflow:3.3.0-python3.11` | –         | Schedules and runs tasks (LocalExecutor)  |
+| Service     | Image                                | Host port | Purpose                                   |
+|-------------|--------------------------------------|-----------|-------------------------------------------|
+| `postgres`  | `postgres:15-alpine`                 | **5433**  | Source data **and** Airflow metadata DB   |
+| `webserver` | built from `Dockerfile` (Airflow 3.3)| **8080**  | Airflow UI + REST/execution API server    |
+| `scheduler` | built from `Dockerfile` (Airflow 3.3)| –         | Schedules and runs tasks (LocalExecutor)  |
 
 > **Note on the Postgres port:** the container listens on `5432`, but it is
 > published to **`5433`** on your host to avoid clashing with any local Postgres.
@@ -30,9 +30,13 @@ runs locally via Docker Compose.
 ```
 .
 ├── docker-compose.yml          # Service definitions (postgres, webserver, scheduler)
-├── .env                        # Credentials & Airflow config (committed for local dev)
+├── Dockerfile                  # Airflow image + pinned pipeline dependencies
+├── requirements.txt            # Runtime deps baked into the image
+├── requirements-dev.txt        # Test/lint deps (adds Airflow, pytest, ruff)
+├── .env.example                # Template for .env (real .env is git-ignored)
 ├── init-db.sql                 # Schema + sample data, runs on first DB startup
 ├── Makefile                    # Convenience commands
+├── pyproject.toml              # pytest + ruff configuration
 ├── OPTIONS.md                  # Notes on scaling to REST/Celery/K8s architectures
 │
 ├── dags/                       # Airflow DAG definitions (orchestration only)
@@ -41,7 +45,7 @@ runs locally via Docker Compose.
 │   └── test_dag.py             #   minimal smoke-test DAG
 │
 ├── elt/                        # Reusable pipeline logic (imported by the DAGs)
-│   ├── config.py               #   DB connection string + table/dir constants
+│   ├── config.py               #   DB connection builder + table/dir constants
 │   ├── extract_sales.py        #   ┐
 │   ├── transform_sales.py      #   │ sales pipeline (elt_pipeline_dag)
 │   ├── load_sales.py           #   │
@@ -50,9 +54,9 @@ runs locally via Docker Compose.
 │   ├── transform_csv.py        #   │ csv pipeline (csv_to_db_dag)
 │   └── load_csv.py             #   ┘
 │
+├── tests/                      # pytest suite (see "Tests" below)
+├── .github/workflows/ci.yml    # Lint, tests, DAG import check, image build
 ├── input/                      # CSV inputs for csv_to_db_dag
-│   ├── sales_2024_01.csv
-│   └── sales_2024_02.csv
 ├── output/                     # Generated Excel exports (git-ignored)
 ├── logs/                       # Airflow task logs (git-ignored)
 └── plugins/                    # Custom Airflow plugins (empty)
@@ -60,14 +64,21 @@ runs locally via Docker Compose.
 
 **Design:** DAG files only wire tasks together; all real logic lives in the
 `elt/` package as small, single-purpose modules (one flat package, module names
-suffixed by pipeline: `*_sales` / `*_csv`). This keeps orchestration and logic
-separate and makes the logic testable on its own.
+suffixed by pipeline: `*_sales` / `*_csv`). Each module splits in two:
+
+- a **pure function** that takes and returns a DataFrame (`summarize_by_region`,
+  `transform_sales_frame`, `read_csv_directory`, `write_excel_report`,
+  `normalize_sale_date`) — no Airflow, unit-tested directly;
+- a **task callable** (`aggregate_by_region(**context)`, …) that does the XCom
+  push/pull and logging around it.
+
+That split is what makes the business logic testable without an Airflow runtime.
 
 ---
 
 ## Prerequisites
 
-- Docker & Docker Compose
+- Docker & Docker Compose v2
 - ~4 GB RAM available
 - Host ports **8080** and **5433** free
 
@@ -76,14 +87,20 @@ separate and makes the logic testable on its own.
 ## Quick start
 
 ```bash
-# 1. Start all three services
-docker-compose up -d
+# 1. Create your local .env from the template, then edit the secrets
+cp .env.example .env
+#    generate the two secrets:
+#      python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#      python -c "import secrets; print(secrets.token_urlsafe(32))"
 
-# 2. Watch them come up (first run pulls images + installs pip deps: ~1–2 min)
-docker-compose ps        # wait until webserver & postgres are "healthy"
+# 2. Build the image and start all three services
+docker compose up -d --build     # or: make up
 
-# 3. Open the UI
-#    http://localhost:8080   →   login: admin / admin
+# 3. Watch them come up (first run pulls the base image: ~1-2 min)
+docker compose ps                # wait until webserver & postgres are "healthy"
+
+# 4. Open the UI
+#    http://localhost:8080   →   login: admin / $AIRFLOW_ADMIN_PASSWORD (default: admin)
 ```
 
 On first startup the webserver runs `airflow db migrate`, creates the `admin`
@@ -106,7 +123,7 @@ extract ──▶ transform ──▶ ├─▶ load     (writes transformed_sal
 ```
 
 | Task        | Module               | What it does                                             |
-|-------------|----------------------|---------------------------------------------------------|
+|-------------|----------------------|----------------------------------------------------------|
 | `extract`   | `extract_sales.py`   | `SELECT * FROM raw_sales_data`, push to XCom as JSON     |
 | `transform` | `transform_sales.py` | Add `total_amount = quantity × unit_price`, select cols  |
 | `load`      | `load_sales.py`      | Truncate + insert into `transformed_sales`               |
@@ -123,7 +140,7 @@ extract_csv ──▶ aggregate_by_region ──▶ load_summary   (writes regio
 ```
 
 | Task                  | Module            | What it does                                                        |
-|-----------------------|-------------------|--------------------------------------------------------------------|
+|-----------------------|-------------------|---------------------------------------------------------------------|
 | `extract_csv`         | `extract_csv.py`  | Read & concat every `input/*.csv`, validate schema                 |
 | `aggregate_by_region` | `transform_csv.py`| Group by region → total qty, total revenue, avg price, order count |
 | `load_summary`        | `load_csv.py`     | Truncate + insert into `region_sales_summary`                      |
@@ -139,43 +156,70 @@ Because of Airflow 3.x behavior, use this flow:
 
 ```bash
 # (once, after adding or editing a DAG) register it with the scheduler
-docker-compose exec scheduler airflow dags reserialize
+docker compose exec scheduler airflow dags reserialize
 
 # unpause a DAG so it can run
-docker-compose exec scheduler airflow dags unpause elt_pipeline_dag
+docker compose exec scheduler airflow dags unpause elt_pipeline_dag
 
 # trigger a manual run
-docker-compose exec scheduler airflow dags trigger elt_pipeline_dag
+docker compose exec scheduler airflow dags trigger elt_pipeline_dag
 ```
 
-…or just flip the **pause toggle** and hit **Trigger** in the UI at
-http://localhost:8080.
+…or `make trigger` / `make trigger-csv`, or flip the **pause toggle** and hit
+**Trigger** in the UI at http://localhost:8080.
 
 Check results:
 
 ```bash
-# task states for the latest runs
-docker-compose exec postgres psql -U airflow_user -d airflow_db \
-  -c "SELECT dag_id, task_id, state FROM task_instance ORDER BY start_date DESC LIMIT 10;"
-
-# Excel output
-ls -lh output/
+make db-query          # table list + row counts
+ls -lh output/         # Excel output
 ```
+
+---
+
+## Tests
+
+The suite runs without Docker. Pure-function tests need only pandas; the DAG
+tests need Airflow installed and are **skipped automatically** if it isn't.
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt \
+  --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.0/constraints-3.11.txt
+
+pytest -q        # or: make test
+ruff check .     # or: make lint
+```
+
+| File                       | Covers                                                            |
+|----------------------------|-------------------------------------------------------------------|
+| `test_transform_csv.py`    | Region aggregation: sums, averages, rounding, no input mutation   |
+| `test_transform_sales.py`  | `total_amount` maths, output columns, missing-column failure      |
+| `test_extract_csv.py`      | Multi-file concat, non-CSV files ignored, schema/empty-dir errors |
+| `test_export_sales.py`     | Workbook round-trips, timestamped filename, dir auto-created      |
+| `test_load_sales.py`       | `sale_date` coercion after the XCom JSON round-trip               |
+| `test_config.py`           | Connection string from env; refuses to run without a password     |
+| `test_pipeline_wiring.py`  | XCom keys and `task_ids` line up across tasks (uses a fake TI)    |
+| `test_dags.py`             | DAG files import cleanly; task dependencies and retries are set   |
+
+`pyproject.toml` turns `FutureWarning` into an error, so a deprecated pandas
+call fails the build instead of quietly piling up in task logs.
+
+CI (`.github/workflows/ci.yml`) runs ruff + pytest on Python 3.11 against the
+official Airflow constraints, and separately validates the compose file and
+builds the image.
 
 ---
 
 ## Database
 
-| Setting  | Value                    |
-|----------|--------------------------|
-| Host     | `localhost` (from host)  |
-| Port     | **5433**                 |
-| Database | `airflow_db`             |
-| User     | `airflow_user`           |
-| Password | `airflow_pass_2024`      |
-
-In-container connection string (used by the DAGs):
-`postgresql+psycopg2://airflow_user:airflow_pass_2024@postgres:5432/airflow_db`
+| Setting  | Value                                  |
+|----------|----------------------------------------|
+| Host     | `localhost` (from host)                |
+| Port     | **5433**                               |
+| Database | `$POSTGRES_DB` (default `airflow_db`)  |
+| User     | `$POSTGRES_USER` (default `airflow_user`) |
+| Password | `$POSTGRES_PASSWORD` (set in `.env`)   |
 
 Connect from your host:
 
@@ -192,41 +236,68 @@ psql -h localhost -p 5433 -U airflow_user -d airflow_db
 | `region_sales_summary` | `csv_to_db_dag`       | One row per region with aggregated metrics    |
 
 > `init-db.sql` only runs the **first** time the Postgres volume is created. To
-> re-seed from scratch, run `docker-compose down -v` (this deletes all data).
+> re-seed from scratch, run `docker compose down -v` (this deletes all data).
 
 ---
 
 ## Configuration
 
-All settings live in **`.env`** (committed intentionally — these are throwaway
-local-dev credentials, not secrets):
+Settings live in **`.env`**, which is **git-ignored**; `.env.example` is the
+committed template. Nothing in the code has a credential default — `elt/config.py`
+raises if `POSTGRES_PASSWORD` is unset rather than silently connecting somewhere.
 
-| Variable                        | Purpose                                    |
-|---------------------------------|--------------------------------------------|
-| `POSTGRES_USER/PASSWORD/DB`     | Postgres credentials & database name       |
-| `AIRFLOW__CORE__FERNET_KEY`     | Encrypts Airflow connections/variables     |
-| `AIRFLOW__WEBSERVER__SECRET_KEY`| Flask session signing key                  |
-| `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` | Airflow metadata DB connection       |
+| Variable                              | Purpose                                      |
+|---------------------------------------|----------------------------------------------|
+| `POSTGRES_USER/PASSWORD/DB`           | Postgres credentials & database name         |
+| `DB_HOST` / `DB_PORT`                 | Where the pipelines reach the warehouse      |
+| `AIRFLOW__CORE__FERNET_KEY`           | Encrypts Airflow connections/variables       |
+| `AIRFLOW__API__SECRET_KEY`            | Session signing key (also set as the legacy `[webserver]` key for FAB) |
+| `AIRFLOW__API_AUTH__JWT_SECRET`       | Signs the task-execution API tokens          |
+| `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` | Airflow metadata DB connection               |
+| `AIRFLOW_ADMIN_PASSWORD`              | Password for the `admin` UI user             |
 
-Python deps are installed at container start via `_PIP_ADDITIONAL_REQUIREMENTS`
-(`psycopg2-binary openpyxl pandas sqlalchemy`) — fine for local dev; a real
-deployment would bake these into a custom image instead.
+Python dependencies are **baked into the image** (`Dockerfile` + `requirements.txt`),
+pinned to the official Airflow 3.3.0 constraints file — so container startup is
+fast and the dependency tree is reproducible.
 
 ---
 
 ## Make targets
 
 ```bash
-make up          # start services
+make env         # create .env from .env.example
+make up          # build + start services
 make down        # stop services
-make status      # docker-compose ps
+make status      # container status
 make logs        # tail webserver logs
+make test        # pytest
+make lint        # ruff
+make validate    # DAG import errors + DAG list
+make trigger     # unpause + trigger elt_pipeline_dag
+make trigger-csv # unpause + trigger csv_to_db_dag
 make db-connect  # psql shell into the database
 make db-query    # list tables + row counts
-make trigger     # trigger elt_pipeline_dag
 make clean       # remove logs/ and output/ files
-make rebuild     # down -v + prune + up (full fresh start)
+make rebuild     # down -v + rebuild image + up (full fresh start)
 ```
+
+---
+
+## Design notes & trade-offs
+
+Deliberate choices for a local demo that would change in production:
+
+- **DataFrames travel through XCom as JSON.** Fine for these row counts; at real
+  volume this bloats the metadata database. Production would pass object-storage
+  paths (or a staging table) between tasks, or use a custom XCom backend.
+- **Plain SQLAlchemy engines, credentials from env** rather than Airflow
+  Connections / `PostgresHook`. Keeps the repo runnable with zero UI setup; a
+  real deployment would store the connection in Airflow (encrypted by the Fernet
+  key) or a secrets backend.
+- **The warehouse shares the Airflow metadata database.** One container instead
+  of two; a real system keeps operational metadata and analytical data apart.
+- **Loads are truncate-and-replace.** Simple and idempotent at this size;
+  incremental/upsert loads are the next step (see below).
 
 ---
 
@@ -244,11 +315,13 @@ may find online. Things worth knowing:
   inherit `PYTHONPATH`, so each DAG that imports the `elt` package prepends
   `/opt/airflow` to `sys.path` at the top of the file. If you add a brand-new
   local package and hit `ModuleNotFoundError`, **restart the scheduler**
-  (`docker-compose restart scheduler`) — a first failed import can be cached for
+  (`docker compose restart scheduler`) — a first failed import can be cached for
   the life of the process.
 - **Task execution API:** the scheduler's workers talk to the API server over
   HTTP; `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` points them at the webserver
   container. (If this is wrong, tasks fail with `Connection refused` and no logs.)
+- **`DagBag` changed:** it no longer takes `include_examples`, and `get_dag()`
+  reads from the metadata DB — tests use `DagBag(dag_folder="dags").dags[...]`.
 
 ---
 
@@ -256,12 +329,13 @@ may find online. Things worth knowing:
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
-| DAG not in the UI | Run `docker-compose exec scheduler airflow dags reserialize`; check `airflow dags list-import-errors`. |
+| `required variable POSTGRES_PASSWORD is missing` on `docker compose up` | No `.env` yet — run `cp .env.example .env` (or `make env`) and fill it in. |
+| DAG not in the UI | Run `docker compose exec scheduler airflow dags reserialize`; check `airflow dags list-import-errors`. |
 | `ModuleNotFoundError: No module named 'elt'` | Restart the scheduler (stale failed-import cache); confirm the `sys.path` block is at the top of the DAG file. |
 | Task fails instantly with `Connection refused` and no logs | `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` misconfigured / webserver not healthy. |
+| `RuntimeError: POSTGRES_PASSWORD is not set` in a task log | The Airflow services aren't getting the warehouse env vars — check `.env` and restart. |
 | `port is already allocated` (5433/8080) | Another service owns the port. Stop it, or change the mapping in `docker-compose.yml`. |
-| DAG runs pile up / “triggers every second” | A stray external trigger loop — the scheduler won’t self-trigger a paused DAG. Check for background scripts hitting `dags trigger`. |
-| Need a clean slate | `docker-compose down -v && rm -rf logs/* output/* && docker-compose up -d` (deletes DB data). |
+| Need a clean slate | `make rebuild` (deletes the DB volume). |
 
 ---
 
@@ -277,7 +351,7 @@ Celery + RabbitMQ/Redis, Kubernetes jobs, Cloud Functions, dbt), see
 ## Next steps / ideas
 
 - Externalize SQL into an `elt/sql/` folder loaded by the tasks.
-- Add data-quality checks between transform and load.
-- Incremental loads (track the last processed timestamp).
+- Data-quality checks between transform and load (row counts, null ratios).
+- Incremental loads (track the last processed timestamp) instead of truncate+insert.
+- Failure alerting (email/Slack) via Airflow callbacks, and SLAs on the tasks.
 - Swap the warehouse: DuckDB / `fakesnow` locally, Snowflake in prod.
-- Failure alerting (email/Slack) via Airflow callbacks.

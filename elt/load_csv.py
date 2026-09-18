@@ -1,18 +1,18 @@
 """Load the per-region summary into PostgreSQL."""
 
 import logging
+from io import StringIO
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from elt.config import DB_CONNECTION, REGION_SUMMARY_TABLE
+from elt.config import REGION_SUMMARY_TABLE, get_db_connection
 
 logger = logging.getLogger(__name__)
 
 
 def load_region_summary(**context):
-    """
-    Load the region summary into REGION_SUMMARY_TABLE (truncate + append).
+    """Airflow task: replace ``region_sales_summary`` with the aggregated rows.
 
     Returns:
         int: Number of rows loaded
@@ -32,11 +32,11 @@ def load_region_summary(**context):
             raise ValueError("No region summary found in XCom from transform task")
         logger.info("✓ Region summary retrieved")
 
-        df = pd.read_json(summary_json)
+        df = pd.read_json(StringIO(summary_json))
         logger.info(f"📊 Loaded {len(df)} region rows")
 
         logger.info("🔗 Connecting to database...")
-        engine = create_engine(DB_CONNECTION)
+        engine = create_engine(get_db_connection())
         logger.info("✓ Database connection established")
 
         logger.info(f"🗑️ Clearing existing data from {REGION_SUMMARY_TABLE}...")

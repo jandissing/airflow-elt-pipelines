@@ -1,5 +1,10 @@
 # Local Airflow + PostgreSQL ELT Pipeline - Technical Specifications
 
+> **Historical document.** This is the original specification the project was
+> built from (it targets Airflow 2.9.1). The implementation has since moved to
+> Airflow 3.3.0 and gained a second pipeline, tests and CI — see
+> [README.md](README.md) for what actually runs today.
+
 ## 1. PROJECT OVERVIEW
 
 Build a containerized ELT (Extract, Load, Transform) pipeline using:

@@ -1,0 +1,7 @@
+# Runtime dependencies layered on top of the apache/airflow base image.
+# Versions match the official Airflow 3.3.0 constraints file, which the
+# Dockerfile also passes to pip so the transitive tree stays reproducible.
+pandas==2.1.4
+openpyxl==3.1.5
+psycopg2-binary==2.9.12
+apache-airflow-providers-postgres==6.8.0

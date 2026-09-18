@@ -11,10 +11,38 @@ from elt.config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
+MAX_COLUMN_WIDTH = 50
+
+
+def write_excel_report(df: pd.DataFrame, output_dir: str) -> str:
+    """Write ``df`` to a timestamped ``.xlsx`` in ``output_dir``.
+
+    Creates the directory if needed and widens each column to fit its contents.
+
+    Returns:
+        str: Path to the written file
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filepath = os.path.join(output_dir, f"sales_report_{timestamp}.xlsx")
+
+    with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Sales Data", index=False)
+
+        worksheet = writer.sheets["Sales Data"]
+        for column in worksheet.columns:
+            widest = max(len(str(cell.value)) for cell in column)
+            column_letter = column[0].column_letter
+            worksheet.column_dimensions[column_letter].width = min(
+                widest + 2, MAX_COLUMN_WIDTH
+            )
+
+    return filepath
+
 
 def export_to_excel(**context):
-    """
-    Export transformed data to timestamped Excel file.
+    """Airflow task: export the transformed rows to a timestamped Excel file.
 
     Returns:
         str: Path to exported file
@@ -36,51 +64,21 @@ def export_to_excel(**context):
         df = pd.read_json(StringIO(transformed_data_json))
         logger.info(f"📊 Loaded {len(df)} rows for export")
 
-        logger.info(f"📂 Ensuring output directory exists: {OUTPUT_DIR}")
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        logger.info("✓ Output directory ready")
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"sales_report_{timestamp}.xlsx"
-        filepath = os.path.join(OUTPUT_DIR, filename)
-        logger.info(f"📝 Output filename: {filename}")
-
-        logger.info("🔧 Creating Excel workbook...")
-        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
-            df.to_excel(writer, sheet_name="Sales Data", index=False)
-            logger.info("✓ Data written to Excel")
-
-            worksheet = writer.sheets["Sales Data"]
-            logger.info("📐 Auto-adjusting column widths...")
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
-            logger.info("✓ Column widths adjusted")
-
+        logger.info(f"🔧 Writing workbook to {OUTPUT_DIR}...")
+        filepath = write_excel_report(df, OUTPUT_DIR)
         logger.info(f"✅ Excel file created: {filepath}")
-
-        total_records = len(df)
-        total_revenue = df["total_amount"].sum()
 
         logger.info("=" * 60)
         logger.info("📈 EXPORT SUMMARY")
-        logger.info(f"   Total Records: {total_records}")
-        logger.info(f"   Total Revenue: ${total_revenue:,.2f}")
+        logger.info(f"   Total Records: {len(df)}")
+        logger.info(f"   Total Revenue: ${df['total_amount'].sum():,.2f}")
 
         revenue_by_region = df.groupby("region")["total_amount"].sum()
         logger.info("   Revenue by Region:")
         for region, revenue in revenue_by_region.items():
             logger.info(f"     • {region}: ${revenue:,.2f}")
 
-        logger.info(f"✅ EXPORT TASK COMPLETED")
+        logger.info("✅ EXPORT TASK COMPLETED")
         logger.info("=" * 60)
         return filepath
 

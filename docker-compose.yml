@@ -1,4 +1,35 @@
-version: '3.8'
+# Shared configuration for the two Airflow services (webserver + scheduler).
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: local-airflow-elt:3.3.0
+  environment: &airflow-env
+    AIRFLOW_HOME: /opt/airflow
+    PYTHONPATH: /opt/airflow
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:?set it in .env}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?set it in .env}
+    # [api] secret_key is the Airflow 3 name; [webserver] secret_key is still
+    # read by the FAB auth manager for Flask sessions, so both are set.
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set it in .env}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set it in .env}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?set it in .env}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://webserver:8080/execution/"
+    # Warehouse credentials read by the elt package (elt/config.py)
+    POSTGRES_USER: ${POSTGRES_USER:-airflow_user}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    POSTGRES_DB: ${POSTGRES_DB:-airflow_db}
+    DB_HOST: ${DB_HOST:-postgres}
+    DB_PORT: ${DB_PORT:-5432}
+  volumes:
+    - .:/opt/airflow
+    - ./logs:/opt/airflow/logs
+    - ./output:/opt/airflow/output
+  networks:
+    - airflow-network
 
 services:
   postgres:
@@ -6,7 +37,7 @@ services:
     container_name: airflow-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airflow_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow_pass_2024}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
       POSTGRES_DB: ${POSTGRES_DB:-airflow_db}
     ports:
       - "5433:5432"
@@ -22,66 +53,30 @@ services:
       - airflow-network
 
   webserver:
-    image: apache/airflow:3.3.0-python3.11
+    <<: *airflow-common
     container_name: airflow-webserver
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      AIRFLOW_HOME: /opt/airflow
-      PYTHONPATH: /opt/airflow
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
-      AIRFLOW__API_AUTH__JWT_SECRET: "super_secret_jwt_key_for_airflow_3"
-      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://webserver:8080/execution/"
-      _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
-    volumes:
-      - .:/opt/airflow
-      - ./logs:/opt/airflow/logs
-      - ./output:/opt/airflow/output
     ports:
       - "8080:8080"
     command: >
       bash -c "airflow db migrate &&
-               airflow users create -r Admin -u admin -e admin@example.com -f Admin -l User -p admin 2>/dev/null || true &&
+               airflow users create -r Admin -u admin -e admin@example.com -f Admin -l User -p ${AIRFLOW_ADMIN_PASSWORD:-admin} 2>/dev/null || true &&
                airflow api-server"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v2/monitor/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - airflow-network
 
   scheduler:
-    image: apache/airflow:3.3.0-python3.11
+    <<: *airflow-common
     container_name: airflow-scheduler
     depends_on:
       webserver:
         condition: service_healthy
-    environment:
-      AIRFLOW_HOME: /opt/airflow
-      PYTHONPATH: /opt/airflow
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
-      AIRFLOW__API_AUTH__JWT_SECRET: "super_secret_jwt_key_for_airflow_3"
-      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://webserver:8080/execution/"
-      _PIP_ADDITIONAL_REQUIREMENTS: "postgres psycopg2-binary openpyxl pandas sqlalchemy"
-    volumes:
-      - .:/opt/airflow
-      - ./logs:/opt/airflow/logs
-      - ./output:/opt/airflow/output
     command: airflow scheduler
-    networks:
-      - airflow-network
 
 volumes:
   postgres_data:

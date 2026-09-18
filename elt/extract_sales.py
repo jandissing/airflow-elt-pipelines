@@ -5,25 +5,24 @@ import logging
 import pandas as pd
 from sqlalchemy import create_engine
 
-from elt.config import DB_CONNECTION, RAW_TABLE
+from elt.config import RAW_TABLE, get_db_connection, get_safe_db_connection
 
 logger = logging.getLogger(__name__)
 
 
 def extract_raw_data(**context):
-    """
-    Extract raw sales data from PostgreSQL.
+    """Airflow task: read the raw sales table and publish the rows to XCom.
 
     Returns:
         int: Number of rows extracted
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"🔍 EXTRACT TASK STARTED")
+        logger.info("🔍 EXTRACT TASK STARTED")
         logger.info(f"📍 Table: {RAW_TABLE}")
-        logger.info(f"🔗 Connection: {DB_CONNECTION[:50]}...")
+        logger.info(f"🔗 Connection: {get_safe_db_connection()}")
 
-        engine = create_engine(DB_CONNECTION)
+        engine = create_engine(get_db_connection())
         logger.info("✓ Database connection established")
 
         query = f"SELECT * FROM {RAW_TABLE} ORDER BY sale_date"
@@ -48,7 +47,7 @@ def extract_raw_data(**context):
 
     except Exception as e:
         logger.error("=" * 60)
-        logger.error(f"❌ EXTRACT TASK FAILED")
+        logger.error("❌ EXTRACT TASK FAILED")
         logger.error(f"Error: {str(e)}", exc_info=True)
         logger.error("=" * 60)
         raise

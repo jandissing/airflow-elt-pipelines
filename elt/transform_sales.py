@@ -7,10 +7,23 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+OUTPUT_COLUMNS = ["customer_name", "product_name", "total_amount", "sale_date", "region"]
+
+
+def transform_sales_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Add ``total_amount = quantity * unit_price`` and keep the columns we load.
+
+    The input frame is not modified.
+
+    Raises:
+        KeyError: if a required source column is missing.
+    """
+    with_total = df.assign(total_amount=df["quantity"] * df["unit_price"])
+    return with_total[OUTPUT_COLUMNS].copy()
+
 
 def transform_data(**context):
-    """
-    Transform raw data by calculating total_amount column.
+    """Airflow task: read raw rows from XCom, publish the transformed rows.
 
     Returns:
         int: Number of rows transformed
@@ -32,13 +45,11 @@ def transform_data(**context):
         logger.info(f"📋 Input columns: {list(df.columns)}")
 
         logger.info("🧮 Calculating total_amount = quantity × unit_price")
-        df["total_amount"] = df["quantity"] * df["unit_price"]
-        logger.info(f"✓ Calculation complete. Min: ${df['total_amount'].min()}, Max: ${df['total_amount'].max()}")
-
-        logger.info("✂️ Selecting final columns")
-        transformed_df = df[
-            ["customer_name", "product_name", "total_amount", "sale_date", "region"]
-        ].copy()
+        transformed_df = transform_sales_frame(df)
+        logger.info(
+            f"✓ Calculation complete. Min: ${transformed_df['total_amount'].min()}, "
+            f"Max: ${transformed_df['total_amount'].max()}"
+        )
 
         row_count = len(transformed_df)
         logger.info(f"✓ Selected {row_count} rows")

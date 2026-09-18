@@ -44,3 +44,11 @@ Thumbs.db
 *.tmp
 *.temp
 *~
+
+# Local secrets (commit .env.example instead)
+.env
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.claude/

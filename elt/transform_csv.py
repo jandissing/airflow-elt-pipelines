@@ -1,21 +1,45 @@
 """Aggregate sales rows into a per-region summary."""
 
 import logging
+from io import StringIO
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def aggregate_by_region(**context):
-    """
-    Group raw CSV sales rows by region and compute summary metrics.
+def summarize_by_region(df: pd.DataFrame) -> pd.DataFrame:
+    """Group sales rows by region and compute summary metrics.
 
     Produces one row per region with:
       - total_quantity: sum of quantity
       - total_revenue:  sum of quantity * unit_price
       - avg_unit_price: mean unit_price
       - num_orders:     number of source rows
+
+    The input frame is not modified.
+    """
+    with_revenue = df.assign(line_revenue=df["quantity"] * df["unit_price"])
+
+    summary = (
+        with_revenue.groupby("region")
+        .agg(
+            total_quantity=("quantity", "sum"),
+            total_revenue=("line_revenue", "sum"),
+            avg_unit_price=("unit_price", "mean"),
+            num_orders=("region", "size"),
+        )
+        .reset_index()
+    )
+
+    # Round monetary/avg columns for a clean summary table
+    summary["total_revenue"] = summary["total_revenue"].round(2)
+    summary["avg_unit_price"] = summary["avg_unit_price"].round(2)
+    return summary
+
+
+def aggregate_by_region(**context):
+    """Airflow task: read the extracted rows from XCom, publish a region summary.
 
     Returns:
         int: Number of regions in the summary
@@ -34,27 +58,11 @@ def aggregate_by_region(**context):
             raise ValueError("No CSV data found in XCom from extract task")
         logger.info("✓ Raw data retrieved")
 
-        df = pd.read_json(raw_data_json)
+        df = pd.read_json(StringIO(raw_data_json))
         logger.info(f"📊 Loaded {len(df)} rows across {df['region'].nunique()} regions")
 
-        logger.info("🧮 Computing line revenue = quantity × unit_price")
-        df["line_revenue"] = df["quantity"] * df["unit_price"]
-
         logger.info("📦 Grouping by region and aggregating")
-        summary = (
-            df.groupby("region")
-            .agg(
-                total_quantity=("quantity", "sum"),
-                total_revenue=("line_revenue", "sum"),
-                avg_unit_price=("unit_price", "mean"),
-                num_orders=("region", "size"),
-            )
-            .reset_index()
-        )
-
-        # Round monetary/avg columns for a clean summary table
-        summary["total_revenue"] = summary["total_revenue"].round(2)
-        summary["avg_unit_price"] = summary["avg_unit_price"].round(2)
+        summary = summarize_by_region(df)
 
         region_count = len(summary)
         logger.info(f"✓ Produced {region_count} region summary rows")

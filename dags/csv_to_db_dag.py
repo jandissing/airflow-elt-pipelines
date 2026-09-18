@@ -13,8 +13,8 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 
 from elt.extract_csv import extract_csv_files
-from elt.transform_csv import aggregate_by_region
 from elt.load_csv import load_region_summary
+from elt.transform_csv import aggregate_by_region
 
 default_args = {
     "owner": "airflow",

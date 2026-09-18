@@ -6,14 +6,27 @@ from io import StringIO
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from elt.config import DB_CONNECTION, TRANSFORMED_TABLE
+from elt.config import TRANSFORMED_TABLE, get_db_connection
 
 logger = logging.getLogger(__name__)
 
 
-def load_to_database(**context):
+def normalize_sale_date(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce ``sale_date`` back to a real date after the XCom JSON round-trip.
+
+    JSON turns the column into ISO strings (or epoch millis), which Postgres
+    rejects for a DATE column. Frames without the column pass through unchanged.
     """
-    Load transformed data into transformed_sales table.
+    if "sale_date" not in df.columns:
+        return df
+
+    normalized = df.copy()
+    normalized["sale_date"] = pd.to_datetime(normalized["sale_date"]).dt.date
+    return normalized
+
+
+def load_to_database(**context):
+    """Airflow task: replace ``transformed_sales`` with the transformed rows.
 
     Returns:
         int: Number of rows loaded
@@ -33,23 +46,17 @@ def load_to_database(**context):
             raise ValueError("No transformed data found in XCom from transform task")
         logger.info("✓ Transformed data retrieved")
 
-        df = pd.read_json(StringIO(transformed_data_json))
-        logger.info(f"📊 Loaded {len(df)} rows")
+        df = normalize_sale_date(pd.read_json(StringIO(transformed_data_json)))
+        logger.info(f"📊 Loaded {len(df)} rows (sale_date normalized to date type)")
 
-        # sale_date survives the JSON round-trip as an ISO string; coerce it back
-        # to a real date so it matches the DATE column (avoids bigint/date mismatch).
-        if "sale_date" in df.columns:
-            df["sale_date"] = pd.to_datetime(df["sale_date"]).dt.date
-            logger.info("✓ Normalized sale_date to date type")
-
-        logger.info(f"🔗 Connecting to database...")
-        engine = create_engine(DB_CONNECTION)
+        logger.info("🔗 Connecting to database...")
+        engine = create_engine(get_db_connection())
         logger.info("✓ Database connection established")
 
         logger.info(f"🗑️ Clearing existing data from {TRANSFORMED_TABLE}...")
         with engine.begin() as connection:
             connection.execute(text(f"DELETE FROM {TRANSFORMED_TABLE}"))
-        logger.info(f"✓ Old data cleared")
+        logger.info("✓ Old data cleared")
 
         logger.info(f"💾 Inserting {len(df)} new rows...")
         df.to_sql(TRANSFORMED_TABLE, engine, if_exists="append", index=False)
