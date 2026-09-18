@@ -86,22 +86,45 @@ That split is what makes the business logic testable without an Airflow runtime.
 
 ## Quick start
 
-```bash
-# 1. Create your local .env from the template, then edit the secrets
-cp .env.example .env
-#    generate the two secrets:
-#      python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-#      python -c "import secrets; print(secrets.token_urlsafe(32))"
+### 1. Create your `.env`
 
-# 2. Build the image and start all three services
+The stack reads its credentials from a `.env` file, which is **not** in the
+repository. Copy the template:
+
+```bash
+cp .env.example .env     # or: make env
+```
+
+Now open `.env` and replace the four placeholder values. All three secrets can
+be generated with the standard library — no extra packages needed:
+
+```bash
+# AIRFLOW__CORE__FERNET_KEY  (must be a 32-byte urlsafe-base64 key, not any random string)
+python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+
+# AIRFLOW__API__SECRET_KEY and AIRFLOW__API_AUTH__JWT_SECRET (run twice, use different values)
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> ⚠️ **`POSTGRES_PASSWORD` appears twice** — on its own line *and* inside
+> `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN`. The two must match, or Airflow starts
+> but can't reach its metadata database.
+
+Nothing else in `.env` needs changing for a local run.
+
+### 2. Start the stack
+
+```bash
 docker compose up -d --build     # or: make up
 
-# 3. Watch them come up (first run pulls the base image: ~1-2 min)
 docker compose ps                # wait until webserver & postgres are "healthy"
-
-# 4. Open the UI
-#    http://localhost:8080   →   login: admin / $AIRFLOW_ADMIN_PASSWORD (default: admin)
+                                 # (first run pulls the base image: ~1-2 min)
 ```
+
+### 3. Open the UI
+
+http://localhost:8080 — log in as `admin` with the password you set in
+`AIRFLOW_ADMIN_PASSWORD` (default: `admin`).
 
 On first startup the webserver runs `airflow db migrate`, creates the `admin`
 user, and starts the API server; the scheduler then begins parsing DAGs.

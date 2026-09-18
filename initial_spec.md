@@ -35,7 +35,7 @@ Build a containerized ELT (Extract, Load, Transform) pipeline using:
 - Executor: LocalExecutor (not DistributedExecutor)
 - Dags Folder: `/opt/airflow/dags`
 - Load Examples: False
-- Fernet Key: `d6Vefz3G9U_wnXnTE8jV7tIcaOP6p8qcTu_QWLEHQkU=`
+- Fernet Key: `<generate-one-see-README>`
 - Webserver Secret Key: `secret_key_here`
 
 **Database Connection:**
@@ -43,9 +43,9 @@ Build a containerized ELT (Extract, Load, Transform) pipeline using:
 - Host: `postgres` (Docker internal DNS)
 - Port: 5432
 - User: `airflow`
-- Password: `airflow`
+- Password: `<set in .env>`
 - Database: `airflow`
-- Connection String: `postgresql+psycopg2://airflow:airflow@postgres:5432/airflow`
+- Connection String: `postgresql+psycopg2://<user>:<password>@postgres:5432/<db>`
 
 **Additional Python Packages:**
 - postgres
@@ -85,7 +85,7 @@ project-root/
 - Three services: postgres, webserver, scheduler
 - Postgres service:
   - Uses `postgres:15-alpine`
-  - Environment: POSTGRES_USER=airflow, POSTGRES_PASSWORD=airflow, POSTGRES_DB=airflow
+  - Environment: POSTGRES_USER=<user>, POSTGRES_PASSWORD=<password>, POSTGRES_DB=<db>
   - Mounts: `/docker-entrypoint-initdb.d/init-db.sql` for initialization
   - Volume: `postgres_data` for persistence
   - Healthcheck: pg_isready command
@@ -97,9 +97,9 @@ project-root/
   - Environment variables:
     - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
     - AIRFLOW__CORE__LOAD_EXAMPLES=False
-    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://<user>:<password>@postgres:5432/<db>
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-    - AIRFLOW__CORE__FERNET_KEY=d6Vefz3G9U_wnXnTE8jV7tIcaOP6p8qcTu_QWLEHQkU=
+    - AIRFLOW__CORE__FERNET_KEY=<generate-one-see-README>
     - AIRFLOW__WEBSERVER__SECRET_KEY=secret_key_here
     - _PIP_ADDITIONAL_REQUIREMENTS=postgres psycopg2-binary openpyxl pandas sqlalchemy
   - Volumes: dags, logs, plugins, output folders
@@ -174,7 +174,7 @@ project-root/
 - tags: ['elt', 'data-engineering']
 
 **Constants:**
-- DB_CONNECTION = 'postgresql+psycopg2://airflow:airflow@postgres:5432/airflow'
+- DB_CONNECTION = 'postgresql+psycopg2://<user>:<password>@postgres:5432/<db>'
 - OUTPUT_DIR = '/opt/airflow/output'
 
 **Task 1: extract (PythonOperator)**
